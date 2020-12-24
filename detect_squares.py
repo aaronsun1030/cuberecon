@@ -3,13 +3,12 @@ import numpy as np
 import math
 import sklearn.cluster
 import scipy.stats
+import matplotlib.pyplot as plt
 # https://programmer.help/blogs/rubik-cube-recognition-using-opencv-edge-and-position-recognition.html
 
 # Hyperparameters
-outliar_thresh = 3
-move_detect_thresh = 1.6
-move_recog_thresh = 1.6
-k = 4
+outliar_thresh = 2
+k = 8
 kmeans = sklearn.cluster.KMeans(n_clusters=k)
 
 def get_corners(gray):
@@ -32,13 +31,7 @@ def get_corners(gray):
         area = cv2.contourArea(contour)
 
         if len(approx) == 4 and curr_hierarchy[2] < 0 and 1400 < area < 5000:
-            # compute the center of the contour
             candidates.extend(approx)
-            M = cv2.moments(contour)
-            if M["m00"]:
-                cX = int(M["m10"] / M["m00"])
-                cY = int(M["m01"] / M["m00"])
-                center.append([[cX, cY]])
     """for i in range(len(candidates)):
         cv2.circle(gray, tuple(candidates[i][0]), 4, (0, 255, 0))
     for i in range(len(center)):
@@ -51,14 +44,27 @@ def get_corners(gray):
 
 def filter_points(data, thresh=outliar_thresh):
     return data[np.all(data - np.mean(data, axis=0) < thresh * np.std(data, axis=0), axis=2).flatten()]
-    d = np.abs(data - np.median(data))
-    mdev = np.median(d)
-    s = d/mdev if mdev else 0.
-    return data[np.all(s < thresh, axis=2).flatten()]
-    
-def check_move(var1, var2, weight=move_detect_thresh):
-    #print(var1, var2)
-    return np.min(var1) * weight < np.min(var2)
+
+varx = []
+vary = []
+kurtx = []
+kurty = []
+diffx = []
+diffy = []
+
+def check_move(start, end):
+    start = start.reshape(-1, 2)
+    end = end.reshape(-1, 2)
+    kmeans_start = kmeans.fit(start)
+    kmeans_end = kmeans.fit(end)
+    varss = []
+    for label in range(k):
+        group = end[kmeans_end.labels_ == label]
+        if len(group):
+            varss.append(np.var(group, axis=0))
+    varss = np.array(varss)
+    varx.extend(varss[:, 0])
+    vary.extend(varss[:, 1])
 
 def get_move(prev, corners):
     mean = np.mean(corners, axis=0)
@@ -71,8 +77,17 @@ def get_move(prev, corners):
             clusters.append(kmean_out.cluster_centers_[label])
     return kmean_out.cluster_centers_
 
+def featurize(p0, p1):
+    """Takes p0 and p1 and turns it into a kFRAME, which is the kmeans result of an array of [x, y, dx, dy] points."""
+    non_outliar = np.all(p1 - np.mean(p1, axis=0) < outliar_thresh * np.std(p1, axis=0), axis=2).flatten()
+    p0 = p0[non_outliar].reshape(-1, 2)
+    p1 = p1[non_outliar].reshape(-1, 2)
+    delta = p1 - p0
+    frame = np.hstack((p0, delta))
+    k_frame = kmeans.fit(frame)
+    return k_frame.cluster_centers_
 
-cap = cv2.VideoCapture('./IMG_2765_Trim.mp4')
+cap = cv2.VideoCapture('./U/U (1).mov')
 
 # Parameters for lucas kanade optical flow
 lk_params = dict( winSize  = (15,15),
@@ -83,7 +98,6 @@ lk_params = dict( winSize  = (15,15),
 ret, old_frame = cap.read()
 old_gray = cv2.cvtColor(old_frame, cv2.COLOR_BGR2GRAY)
 p0 = start = filter_points(get_corners(old_gray))
-U, S, VT = np.linalg.svd(p0.reshape(-1, 2))
 
 while 1:
     # Create some random colors
@@ -91,16 +105,23 @@ while 1:
 
     # Create a mask image for drawing purposes
     mask = np.zeros_like(old_frame)
-    init_var = np.var(p0, axis=0)
 
-    while not check_move(np.var(p0, axis=0), init_var):
+    while True or check_move(start, p0):
         #print(np.linalg.norm(p0.reshape(-1, 2) @ pca))
-        print(scipy.stats.skew(p0, axis=0), scipy.stats.kurtosis(p0, axis=0))
+        #print(scipy.stats.skew(p0, axis=0), scipy.stats.kurtosis(p0, axis=0))
+        #kurtz = scipy.stats.skew(p0, axis=0)
+        #kurtx.append(kurtz[0, 0])
+        #kurty.append(kurtz[0, 1])
+
         ret, frame = cap.read()
+        if not ret:
+            break
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         # calculate optical flow
         p1, st, err = cv2.calcOpticalFlowPyrLK(old_gray, frame_gray, p0, None, **lk_params)
+        
+        print(featurize(p0, p1))
 
         # Select good points
         good_new = p1[st==1]
@@ -108,18 +129,18 @@ while 1:
 
         # draw the tracks
         for i,(new,old) in enumerate(zip(good_new,good_old)):
-            a,b = new.ravel()
-            c,d = old.ravel()
+            a,b = new.ravel().astype(int)
+            c,d = old.ravel().astype(int)
             mask = cv2.line(mask, (a,b),(c,d), color[i].tolist(), 2)
             frame = cv2.circle(frame,(a,b),5,color[i].tolist(),-1)
         img = cv2.add(frame,mask)
         
         cv2.namedWindow("frame", cv2.WINDOW_NORMAL)
         cv2.imshow('frame',img)
-        k = cv2.waitKey(30) & 0xff
-        if k == 27:
+        ka = cv2.waitKey(30) & 0xff
+        if ka == 27:
             break
-        cv2.waitKey()
+        #cv2.waitKey()
 
         # Now update the previous frame and previous points
         old_gray = frame_gray.copy()
@@ -129,10 +150,7 @@ while 1:
     corners = filter_points(get_corners(frame_gray))
     get_move(p0, corners)
     p0 = corners
-    break
-
-
-    
+    break   
 
 cv2.destroyAllWindows()
 cap.release()
