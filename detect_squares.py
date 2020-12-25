@@ -5,10 +5,20 @@ import scipy.stats
 import os
 # https://programmer.help/blogs/rubik-cube-recognition-using-opencv-edge-and-position-recognition.html
 
+
+l = ['R (46).mov', 'Rp (8).mov', 'Dp (46).mov', 'D (23).mov', 'U (19).mov',
+ 'Rp (10).mov', 'D (60).mov', 'Rp (4).mov', 'U (38).mov', 'Rp (6).mov',
+ 'Dp (21).mov', 'Dp (4).mov,' 'Dp (24).mov', 'R (18).mov', 'D (59).mov',
+ 'U (1).mov', 'R (19).mov', 'Rp (5).mov', 'Up (5).mov', 'U (12).mov',
+ 'Dp (37).mov', 'D (16).mov', 'U (18).mov', 'U (37).mov', 'Up (41).mov',
+ 'Dp (25).mov', 'D (49).mov', 'R (7).mov', 'R (48).mov', 'Dp (31).mov',
+ 'D (5).mov', 'Up (20).mov']
+
+
 # Hyperparameters
 outliar_thresh = 2
 n_frames = 5
-k = 8
+k = 6
 kmeans = sklearn.cluster.KMeans(n_clusters=k)
 move_labels = {'U ': 0, 'Up': 1, 'D ': 2, 'Dp': 3, 'R ': 4, 'Rp': 5}
 
@@ -99,7 +109,7 @@ def get_data_point(cap):
         good_new = p1[st==1]
         good_old = p0[st==1]
 
-        """# draw the tracks
+        # draw the tracks
         for i,(new,old) in enumerate(zip(good_new,good_old)):
             a,b = new.ravel().astype(int)
             c,d = old.ravel().astype(int)
@@ -112,7 +122,7 @@ def get_data_point(cap):
         ka = cv2.waitKey(30) & 0xff
         if ka == 27:
             break
-        cv2.waitKey()"""
+        cv2.waitKey()
 
         # Now update the previous frame and previous points
         old_gray = frame_gray.copy()
@@ -126,16 +136,20 @@ def get_data_point(cap):
 
 data = []
 labels = []
+file_name = []
 for subdir, dirs, files in os.walk("./data"):
     for file in files:
         #print os.path.join(subdir, file)
         filepath = subdir + os.sep + file
         print(filepath)
-        if file.endswith(".mov"):
-            cap = cv2.VideoCapture(filepath)
+        if file.endswith(".mov") and file in l:
             move = file[0:2]
+            cap = cv2.VideoCapture(filepath)
             data.append(get_data_point(cap).flatten())
             labels.append(move_labels[move])
+            file_name.append(file)
 
 np.save("./data/data.npy", np.array(data))
 np.save("./data/labels.npy", np.array(labels))
+np.save("./data/filename.npy", np.array(file_name, dtype=object))
+
