@@ -4,7 +4,7 @@ from scipy.spatial import KDTree
 import sklearn.cluster
 
 #read image
-cap = cv2.VideoCapture("U.mp4")
+cap = cv2.VideoCapture("R.mp4")
 ret, frame = cap.read()
 #frame = cv2.imread("IMG_2779.jpg")
 b, g, r = cv2.split(frame)
@@ -60,11 +60,12 @@ cv2.imshow("a", frame)
 cv2.waitKey()"""
 
 
-c = [50, 300, 350, 600, 650, 900]
+# c = [50, 300, 350, 600, 650, 900]
+c = [100, 350, 450, 700, 800, 1050]
 corners = []
 for x in c:
     for y in c:
-        corners.append([x, y, 0])
+        corners.append([x, -y, 0])
         corners.append([x, 0, y])
 corners = np.float32(corners).reshape(-1,3)
 
@@ -74,14 +75,14 @@ camera_matrix = np.array([[frame.shape[1], 0.0, frame.shape[1] / 2], [0.0, frame
 dist_coeffs = np.array([[0, 0, 0, 0, 0]], dtype="float32")
 
 angles = []
+translates = []
 
-axis = np.float32([[3,0,0], [0,3,0], [0,0,-3]]).reshape(-1,3)
-def draw(img, corners, imgpts):
+"""def draw(img, corners, imgpts):
     corner = tuple(corners[0].ravel())
-    img = cv2.line(img, corner, tuple(imgpts[0].ravel()), (255,0,0), 5)
-    img = cv2.line(img, corner, tuple(imgpts[1].ravel()), (0,255,0), 5)
-    img = cv2.line(img, corner, tuple(imgpts[2].ravel()), (0,0,255), 5)
-    return img
+    img = cv2.line(img, corner, tuple(imgpts[0].ravel()), (0,255,255), 5)
+    img = cv2.line(img, corner, tuple(imgpts[1].ravel()), (255,0,255), 5)
+    img = cv2.line(img, corner, tuple(imgpts[2].ravel()), (255,255,0), 5)
+    return img"""
 
 
 for square in candidates:
@@ -93,28 +94,63 @@ for square in candidates:
     bot_right = sorted_x[3] if sorted_x[3, 0, 1] >= sorted_x[2, 0, 1] else sorted_x[2]
     square = np.array([top_left, top_right, bot_right, bot_left], dtype="float32")
     ret, rvec, tvec, inliers = cv2.solvePnPRansac(model_points, square, camera_matrix, dist_coeffs, flags=cv2.SOLVEPNP_ITERATIVE)
-    angles.append(np.vstack((rvec, tvec)).flatten())
+    angles.append(rvec.flatten())
+    translates.append(tvec.flatten())
 
 k = 4
 kmeans = sklearn.cluster.KMeans(n_clusters=k)
 k_frame = kmeans.fit(angles)
-best = np.array(k_frame.cluster_centers_[np.argmax(np.bincount(k_frame.labels_))], dtype="float32")
+index = np.argmax(np.bincount(k_frame.labels_))
+best_a = np.array(k_frame.cluster_centers_[index], dtype="float32").reshape((3, 1))
+# best_t = np.mean(np.array(translates)[k_frame.labels_ == index], axis=0).reshape((3, 1))
+best_t = np.mean(np.array(translates), axis = 0).reshape(3,1)
 
-axis = np.float32([[3,0,0], [0,3,0], [0,0,-3]]).reshape(-1,3)
-imgpts, jac = cv2.projectPoints(axis, best[:3].reshape((3, 1)), best[3:].reshape((3, 1)), camera_matrix, dist_coeffs)
-print(imgpts)
-img = draw(frame, square,imgpts)
+"""axis = np.float32([[250,0,0], [0,250,0], [0,0,-250]]).reshape(-1,3)
+modelpts, jac = cv2.projectPoints(axis, best_a, best_t, camera_matrix, dist_coeffs)
+#print(modelpts)
+img = draw(frame, square, modelpts)
 cv2.imshow('img',img)
 k = cv2.waitKey(0) & 0xff
 if k == 's':
-    cv2.imwrite(fname[:6]+'.png', img)
+    cv2.imwrite(fname[:6]+'.png', img)"""
 
 
+model_pts, jac = cv2.projectPoints(corners, best_a, best_t, camera_matrix, dist_coeffs)
+model_pts = model_pts.reshape(-1, 2)
 
-imgpts, jac = cv2.projectPoints(corners, best[:3].reshape((3, 1)), best[3:].reshape((3, 1)), camera_matrix, dist_coeffs)
+square_pts = []
+for square in candidates:
+    square_pts.extend(square)
+square_pts = np.array(square_pts).reshape(-1, 2)
 
-for i in range(len(imgpts)):
-    cv2.circle(frame, tuple(imgpts[i][0].astype(int)), 4, (255, 0, 0))
+kdtree = KDTree(square_pts)
+
+def costFunc(trans_vec, model_pts, kdtree):
+    new_pts = model_pts + trans_vec
+    dists = kdtree.query(new_pts)[0]
+    num_pts = len(kdtree.data) - 3
+    dists = dists[np.argpartition(dists, num_pts)][:num_pts]
+    return np.sum(dists)
+    
+best_cost, best_trans = float("inf"), None
+
+for real_point in square_pts:
+    for model_point in model_pts:
+        trans_vec = real_point - model_point
+        cost = costFunc(trans_vec, model_pts, kdtree)
+        if cost < best_cost:
+            print(cost)
+            best_cost = cost
+            best_trans = trans_vec
+
+print(costFunc(best_trans, model_pts, kdtree))
+model_pts += best_trans
+
+for i in range(len(model_pts)):
+    cv2.circle(frame, tuple(model_pts[i].astype(int)), 4, (255, 0, 0))
+
+for i in range(len(square_pts)):
+    cv2.circle(frame, tuple(square_pts[i].astype(int)), 4, (0, 0, 255))
 
 cv2.namedWindow("a", cv2.WINDOW_NORMAL)
 cv2.imshow("a", frame)
