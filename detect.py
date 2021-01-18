@@ -4,7 +4,7 @@ from scipy.spatial import KDTree
 import sklearn.cluster
 
 #read image
-cap = cv2.VideoCapture("R.mp4")
+cap = cv2.VideoCapture("U.mp4")
 ret, frame = cap.read()
 #frame = cv2.imread("IMG_2779.jpg")
 b, g, r = cv2.split(frame)
