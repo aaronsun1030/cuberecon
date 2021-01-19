@@ -22,12 +22,33 @@ k = 6
 kmeans = sklearn.cluster.KMeans(n_clusters=k)
 move_labels = {'U ': 0, 'Up': 1, 'D ': 2, 'Dp': 3, 'R ': 4, 'Rp': 5}
 
-def get_corners(gray):
-    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+def get_corners(frame):
+    b, g, r = cv2.split(frame)
+
+    #edge detection filter
+    kernel = np.array([[0.0, -1.0, 0.0], 
+                    [-1.0, 4.0, -1.0],
+                    [0.0, -1.0, 0.0]])
+
+    #filter the source image
+    b_out = cv2.filter2D(b,-1,kernel)
+    g_out = cv2.filter2D(g,-1,kernel)
+    r_out = cv2.filter2D(r,-1,kernel)
+
+    #cv2.imshow("", cv2.merge((b_out, g_out, r_out)))
+
+    blur = cv2.GaussianBlur(cv2.cvtColor(cv2.merge((b_out, g_out, r_out)), cv2.COLOR_BGR2GRAY),(5,5),0)
+    ret3,th3 = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+
+    blurred = cv2.GaussianBlur(th3, (3, 3), 0)
     canny = cv2.Canny(blurred, 20, 40)
     kernel = np.ones((3,3), np.uint8)
     dilated = cv2.dilate(canny, kernel, iterations=2)
     (contours, hierarchy) = cv2.findContours(dilated.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    """cv2.drawContours(frame, contours, -1, (0,255,0), 3)
+    cv2.imshow("", frame)
+    cv2.waitKey()"""
 
     hierarchy = hierarchy[0]
     candidates = []
@@ -41,16 +62,13 @@ def get_corners(gray):
         approx = cv2.approxPolyDP(contour, 0.05 * peri, True)
         area = cv2.contourArea(contour)
 
-        if len(approx) == 4 and curr_hierarchy[2] < 0 and 1400 < area < 10000:
+        if len(approx) == 4 and len(cv2.convexHull(approx, returnPoints = False)) == 4 and curr_hierarchy[2] < 0 and area > 1000:
             candidates.extend(approx)
     """for i in range(len(candidates)):
-        cv2.circle(gray, tuple(candidates[i][0]), 4, (0, 255, 0))
+        cv2.circle(frame, tuple(candidates[i][0]), 4, (255, 0, 0))
     for i in range(len(center)):
-        cv2.circle(gray, tuple(center[i][0]), 4, (255, 255, 255))
-    #cv2.drawContours(gray, center, -1, (255, 0, 255), 3)
-    cv2.namedWindow("a", cv2.WINDOW_NORMAL)
-    cv2.imshow("a", gray)
-    cv2.waitKey()"""
+        cv2.circle(frame, tuple(center[i][0]), 4, (255, 255, 255))
+    #cv2.drawContours(th3, candidates, -1, (0, 255, 0), 3)"""
     return np.array(candidates, dtype='float32')
 
 def filter_points(data, thresh=outliar_thresh):
@@ -81,7 +99,8 @@ def get_data_point(cap):
     # Take first frame and find corners in it
     ret, old_frame = cap.read()
     old_gray = cv2.cvtColor(old_frame, cv2.COLOR_BGR2GRAY)
-    p0 = filter_points(get_corners(old_gray))
+    #old_gray = bg.apply(old_frame)
+    p0 = filter_points(get_corners(old_frame))
 
     # Create some random colors
     color = np.random.randint(0,255,(100,3))
@@ -109,7 +128,7 @@ def get_data_point(cap):
         good_new = p1[st==1]
         good_old = p0[st==1]
 
-        # draw the tracks
+        """# draw the tracks
         for i,(new,old) in enumerate(zip(good_new,good_old)):
             a,b = new.ravel().astype(int)
             c,d = old.ravel().astype(int)
@@ -122,7 +141,7 @@ def get_data_point(cap):
         ka = cv2.waitKey(30) & 0xff
         if ka == 27:
             break
-        cv2.waitKey()
+        cv2.waitKey()"""
 
         # Now update the previous frame and previous points
         old_gray = frame_gray.copy()
@@ -142,7 +161,7 @@ for subdir, dirs, files in os.walk("./data"):
         #print os.path.join(subdir, file)
         filepath = subdir + os.sep + file
         print(filepath)
-        if file.endswith(".mov") and file in l:
+        if file.endswith(".mov"):
             move = file[0:2]
             cap = cv2.VideoCapture(filepath)
             data.append(get_data_point(cap).flatten())
