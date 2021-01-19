@@ -62,9 +62,7 @@ def gen_dataset(mag_thresh = 0, frames_path = "./frame_data", videos_path = "./d
                 video_frames, video_labels = process_video(file_path, mag_thresh)
                 for frame, label in zip(video_frames, video_labels):
                     label_counts[label] = label_counts.get(label, 0) + 1
-                    if not os.path.exists(frames_path + os.sep + label):
-                        os.mkdir(frames_path + os.sep + label)
-                    frame_path = frames_path + os.sep + label + os.sep + label + str(label_counts[label]) + ".npy"
+                    frame_path = frames_path + os.sep + label + str(label_counts[label]) + ".npy"
                     np.save(frame_path, frame)
 
 def filter_points(data, thresh=outliar_thresh):
