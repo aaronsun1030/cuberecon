@@ -9,9 +9,6 @@ min_sq_area = 100
 mag_thresh = 1
 
 def process_video(file_path, mag_thresh):
-
-    flow_frames, frame_labels = [], []
-    
     label = os.path.basename(file_path)[0:2].replace(' ', '')
 
     cap = cv2.VideoCapture(file_path)
@@ -23,8 +20,6 @@ def process_video(file_path, mag_thresh):
     hsv[...,1] = 255
 
     while frame2 is not None:
-        cur_label = label
-        
         pts = get_points(frame2)
         pts = filter_points(pts)
         box = find_bounding_box(pts, frame2.shape)
@@ -37,15 +32,12 @@ def process_video(file_path, mag_thresh):
             cur_label = "N"
 
         mag_ang = np.array([mag, ang])[:, box[2]:box[3], box[0]:box[1]]
-
-        flow_frames.append(mag_ang)
-        frame_labels.append(cur_label)
+        yield mag_ang, label
 
         prvs = next
         ret, frame2 = cap.read()
 
     cap.release()
-    return flow_frames, frame_labels
 
 def gen_dataset(mag_thresh = 0, frames_path = "./frame_data", videos_path = "./data"):
 
@@ -59,8 +51,7 @@ def gen_dataset(mag_thresh = 0, frames_path = "./frame_data", videos_path = "./d
             if file.endswith(".mov"):
                 file_path = subdir + os.sep + file
                 print(file_path)
-                video_frames, video_labels = process_video(file_path, mag_thresh)
-                for frame, label in zip(video_frames, video_labels):
+                for frame, label in process_video(file_path, mag_thresh):
                     label_counts[label] = label_counts.get(label, 0) + 1
                     frame_path = frames_path + os.sep + label + str(label_counts[label]) + ".npy"
                     np.save(frame_path, frame)
