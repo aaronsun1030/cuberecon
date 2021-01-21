@@ -9,7 +9,7 @@ min_sq_area = 100
 mag_thresh = 1
 
 def process_video(file_path, mag_thresh):
-    label = os.path.basename(file_path)[0:2].replace(' ', '')
+    label = os.path.basename(os.path.dirname(file_path))
 
     cap = cv2.VideoCapture(file_path)
 
@@ -20,6 +20,8 @@ def process_video(file_path, mag_thresh):
     hsv[...,1] = 255
 
     while frame2 is not None:
+        cur_label = label
+        
         pts = get_points(frame2)
         pts = filter_points(pts)
         box = find_bounding_box(pts, frame2.shape)
@@ -29,10 +31,10 @@ def process_video(file_path, mag_thresh):
 
         mag, ang = cv2.cartToPolar(flow[...,0], flow[...,1])
         if np.average(mag) < mag_thresh:
-            cur_label = "N"
+            cur_label = "N_"
 
         mag_ang = np.array([mag, ang])[:, box[2]:box[3], box[0]:box[1]]
-        yield mag_ang, label
+        yield mag_ang, cur_label
 
         prvs = next
         ret, frame2 = cap.read()
