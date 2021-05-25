@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import os
 import shutil
+import tensorflow as tf
 
 outliar_thresh = 2
 cube_buffer = 100
@@ -24,7 +25,7 @@ def process_video(file_path, mag_thresh):
         
         pts = get_points(frame2)
         pts = filter_points(pts)
-        box = find_bounding_box(pts, frame2.shape)
+        #box = find_bounding_box(pts, frame2.shape)
 
         next = cv2.cvtColor(frame2,cv2.COLOR_BGR2GRAY)
         flow = cv2.calcOpticalFlowFarneback(prvs,next, None, 0.5, 3, 15, 3, 5, 1.2, 0)
@@ -33,7 +34,8 @@ def process_video(file_path, mag_thresh):
         if np.average(mag) < mag_thresh:
             cur_label = "N_"
 
-        mag_ang = np.array([mag, ang])[:, box[2]:box[3], box[0]:box[1]]
+        mag_ang = np.array([mag, ang])#[:, box[2]:box[3], box[0]:box[1]]
+        mag_ang = tf.image.resize(np.moveaxis(mag_ang, 0, -1), size=(256, 256))
         yield mag_ang, cur_label
 
         prvs = next
@@ -50,7 +52,7 @@ def gen_dataset(mag_thresh = 0, frames_path = "./frame_data", videos_path = "./d
     os.mkdir(frames_path)
     for subdir, dirs, files in os.walk(videos_path):
         for file in files:
-            if file.endswith(".mov"):
+            if file.endswith(".MOV"):
                 file_path = subdir + os.sep + file
                 print(file_path)
                 for frame, label in process_video(file_path, mag_thresh):
@@ -114,4 +116,4 @@ def find_bounding_box(points, dims, buffer=cube_buffer):
     max_y = min(max_y + buffer, dims[0])
     return (min_x, max_x, min_y, max_y)
 
-gen_dataset(mag_thresh)
+#gen_dataset(mag_thresh)

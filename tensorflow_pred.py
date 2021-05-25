@@ -15,7 +15,7 @@ def display_flow(mag, ang):
     cv2.imshow('frame2',rgb)
     cv2.waitKey()
 
-encoding = ['D', 'Dp', 'N', 'R', 'Rp', 'U', 'Up']
+encoding = ['N_', 'B_', 'Bp', 'D_', 'Dp', 'F_', 'Fp', 'L_', 'Lp', 'R_', 'Rp', 'U_', 'Up']
 
 def batch(split):
     all_dirs = list(os.walk("frame_data/"))[0][2]
@@ -29,15 +29,15 @@ def batch(split):
     while True:
         for file in all_dirs:
             if file.endswith(".npy"):
-                X.append(tf.image.resize(np.swapaxes(np.load("frame_data/" + file), 0, 2), size=(256, 256)))
-                y.append(encoding.index(file[0] + ("p" if file[1] == "p" else "")))
+                X.append(np.load("frame_data/" + file))
+                y.append(encoding.index(file[0:2]))
                 if len(y) == 8:
                     X = np.array(X, dtype="uint8")
                     y = tf.keras.utils.to_categorical(y, num_classes=len(encoding))
                     yield X, y
                     X, y = [], []
 
-'''model = tf.keras.applications.InceptionV3(
+model = tf.keras.applications.InceptionV3(
     include_top=True,
     weights=None,
     input_tensor=None,
@@ -54,13 +54,14 @@ def batch(split):
 logdir="logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=logdir)
 
-model = tf.keras.models.load_model("model")
+#model = tf.keras.models.load_model("model")
 model.compile(optimizer=tf.keras.optimizers.Adam(), metrics=['accuracy'], loss=tf.keras.losses.CategoricalCrossentropy())
-model.fit(x=batch("train"), epochs=20, steps_per_epoch=104, validation_data=batch("val"), validation_steps=26, callbacks=[tensorboard_callback])
-model.save("model")'''
+checkpoint = tf.keras.callbacks.ModelCheckpoint("checkpoints", monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+model.fit(x=batch("train"), epochs=20, steps_per_epoch=855, validation_data=batch("val"), validation_steps=213, callbacks=[tensorboard_callback, checkpoint])
+model.save("model")
 
-model = tf.keras.models.load_model("model")
-for x, y in batch("val"):    
+'''model = tf.keras.models.load_model("model")
+for x, y in batch("val"):
     predicted = model.predict(x)
     result = np.absolute(y-predicted)
     for i in range(len(x)):
@@ -70,4 +71,4 @@ for x, y in batch("val"):
             print("prediction:", encoding[np.argmax(predicted[i])], "expected:", encoding[np.argmax(y[i])])
             display_flow(mag, ang)
         else:
-            print("got it right!")
+            print("got it right")'''
