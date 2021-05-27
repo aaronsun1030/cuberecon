@@ -59,55 +59,56 @@ labels_dir = Path('./labels')
 video_dir = Path('./data/B_')
 buffer_size = 10
 
-def label(vid):
+def label(vid, relabel=False):
     filename = vid.name
+    if relabel:
+        old_labels = list(np.load(str(labels_dir) + '/' + filename + '.npy'))
     cap = cv2.VideoCapture(str(video_dir) + '/' + filename)
     labels = []
-    prev_frames = []
 
     cv2.namedWindow("Display frame", cv2.WINDOW_NORMAL)
-
+    
+    frames = []
     while (frame := cap.read()[1]) is not None:
-        clean = frame.copy()
-        prev_frames.append(clean)
-        if len(prev_frames) >= buffer_size:
-            prev_frames.pop(0)
+        frames.append(frame)
+    frame_index = 0
+    while frame_index < len(frames):
+        frame = frames[frame_index].copy()
         write_moves(frame, labels, buffer_size)
+        write_moves(frame, old_labels[:frame_index], buffer_size, below=True)
         cv2.imshow("Display frame", frame)
         c = None
+        backspace = False
         while c not in keymapping:
             c = chr(cv2.waitKey(0))
             if c == '\b':
-                backspace(prev_frames, labels)
-                frame = clean.copy()
-                write_moves(frame, labels, buffer_size)
+                labels.pop()
+                frame_index -= 1
+                backspace = True
+                break
+            elif c == chr(27):
+                cap.release()
+                return 
+        if not backspace:
+            if relabel and keymapping[c] != old_labels[frame_index]:
+                cv2.putText(frame, "Confirm relabel?", (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
                 cv2.imshow("Display frame", frame)
-        labels.append(keymapping[c])
+                if c == chr(cv2.waitKey(0)):
+                    labels.append(keymapping[c])
+                else:
+                    labels.append(old_labels[frame_index])
+            else:
+                labels.append(keymapping[c])
+            frame_index += 1
+        
     np.save(str(labels_dir) + '/' + filename, np.array(labels))
     cap.release()
 
-def write_moves(frame, labels, buffer_size):
+def write_moves(frame, labels, buffer_size, below=False):
     if len(labels) >= buffer_size:
         labels = labels[-buffer_size:]
-    cv2.putText(frame, str(labels), (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
-
-def backspace(prev_frames, labels):
-    if len(prev_frames) == 0:
-        return None
-    labels.pop()
-    clean = prev_frames[-1]
-    frame = clean.copy()
-    write_moves(frame, labels, buffer_size)
-    cv2.imshow("Display frame", frame)
-    c = None
-    while c not in keymapping:
-        c = chr(cv2.waitKey(0))
-        if c == '\b':
-            backspace(prev_frames[:-1], labels)
-            frame = clean.copy()
-            write_moves(frame, labels, buffer_size)
-            cv2.imshow("Display frame", frame)
-    labels.append(keymapping[c])
+    y = 100 if below else 50
+    cv2.putText(frame, str(labels), (50, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
 #label('IMG_2777.MOV')
 
@@ -115,5 +116,5 @@ def already_labeled(vid):
     return Path(str(labels_dir) + '/' + vid.name + '.npy').exists()
 
 for vid in video_dir.iterdir():
-    if str(vid)[-3:].lower() in ("mov", "mp4") and not already_labeled(vid):
-        label(vid)
+    if str(vid)[-3:].lower() in ("mov", "mp4"):
+        label(vid, already_labeled(vid))
